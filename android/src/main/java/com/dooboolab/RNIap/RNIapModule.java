@@ -240,6 +240,12 @@ public class RNIapModule extends ReactContextBaseJavaModule {
               item.putString("title", skuDetails.getTitle());
               item.putString("description", skuDetails.getDescription());
               item.putString("introductoryPrice", skuDetails.getIntroductoryPrice());
+              String introductoryPriceAmountMicros = skuDetails.getIntroductoryPriceAmountMicros();
+              if (introductoryPriceAmountMicros != null && !introductoryPriceAmountMicros.isEmpty()) {
+                  item.putString("introductoryPriceAmount", String.valueOf(Long.parseLong(introductoryPriceAmountMicros) / 1000000d));
+              } else {
+                  item.putString("introductoryPriceAmount", "");
+              }
               item.putString("subscriptionPeriodAndroid", skuDetails.getSubscriptionPeriod());
               item.putString("freeTrialPeriodAndroid", skuDetails.getFreeTrialPeriod());
               item.putString("introductoryPriceCyclesAndroid", skuDetails.getIntroductoryPriceCycles());
