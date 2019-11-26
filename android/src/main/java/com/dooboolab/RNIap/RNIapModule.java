@@ -264,7 +264,7 @@ public class RNIapModule extends ReactContextBaseJavaModule implements Purchases
               item.putString("introductoryPrice", skuDetails.getIntroductoryPrice());
               Long introductoryPriceAmountMicros = skuDetails.getIntroductoryPriceAmountMicros();
               if (introductoryPriceAmountMicros != null && !introductoryPriceAmountMicros.isEmpty()) {
-                  item.putString("introductoryPriceAmount", (introductoryPriceAmountMicros / 1000000d));
+                  item.putString("introductoryPriceAmount", (introductoryPriceAmountMicros / 1000000f));
               } else {
                   item.putString("introductoryPriceAmount", "");
               }
