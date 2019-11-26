@@ -262,12 +262,7 @@ public class RNIapModule extends ReactContextBaseJavaModule implements Purchases
               item.putString("title", skuDetails.getTitle());
               item.putString("description", skuDetails.getDescription());
               item.putString("introductoryPrice", skuDetails.getIntroductoryPrice());
-              Long introductoryPriceAmountMicros = skuDetails.getIntroductoryPriceAmountMicros();
-              if (introductoryPriceAmountMicros != null && !introductoryPriceAmountMicros.isEmpty()) {
-                  item.putString("introductoryPriceAmount", (introductoryPriceAmountMicros / 1000000f));
-              } else {
-                  item.putString("introductoryPriceAmount", "");
-              }
+              item.putDouble("introductoryPriceAmount", (skuDetails.getIntroductoryPriceAmountMicros() / 1000000f));
               item.putString("subscriptionPeriodAndroid", skuDetails.getSubscriptionPeriod());
               item.putString("freeTrialPeriodAndroid", skuDetails.getFreeTrialPeriod());
               item.putString("introductoryPriceCyclesAndroid", skuDetails.getIntroductoryPriceCycles());
