@@ -17,7 +17,7 @@ import RNIap, {
   purchaseErrorListener,
   purchaseUpdatedListener,
 } from 'react-native-iap';
-import React, { Component } from 'react';
+import React, {Component} from 'react';
 
 import NativeButton from 'apsl-react-native-button';
 
@@ -116,7 +116,7 @@ class Page extends Component {
   async componentDidMount(): void {
     try {
       const result = await RNIap.initConnection();
-      await RNIap.consumeAllItemsAndroid();
+      await RNIap.flushFailedPurchasesCachedAsPendingAndroid();
       console.log('result', result);
     } catch (err) {
       console.warn(err.code, err.message);
@@ -140,7 +140,7 @@ class Page extends Component {
             console.warn('ackErr', ackErr);
           }
 
-          this.setState({ receipt }, () => this.goNext());
+          this.setState({receipt}, () => this.goNext());
         }
       },
     );
@@ -162,6 +162,7 @@ class Page extends Component {
       purchaseErrorSubscription.remove();
       purchaseErrorSubscription = null;
     }
+    RNIap.endConnection();
   }
 
   goNext = (): void => {
@@ -173,7 +174,7 @@ class Page extends Component {
       const products = await RNIap.getProducts(itemSkus);
       // const products = await RNIap.getSubscriptions(itemSkus);
       console.log('Products', products);
-      this.setState({ productList: products });
+      this.setState({productList: products});
     } catch (err) {
       console.warn(err.code, err.message);
     }
@@ -183,7 +184,7 @@ class Page extends Component {
     try {
       const products = await RNIap.getSubscriptions(itemSubs);
       console.log('Products', products);
-      this.setState({ productList: products });
+      this.setState({productList: products});
     } catch (err) {
       console.warn(err.code, err.message);
     }
@@ -226,7 +227,7 @@ class Page extends Component {
   };
 
   render(): React.ReactElement {
-    const { productList, receipt, availableItemsMessage } = this.state;
+    const {productList, receipt, availableItemsMessage} = this.state;
     const receipt100 = receipt.substring(0, 100);
 
     return (
@@ -235,22 +236,21 @@ class Page extends Component {
           <Text style={styles.headerTxt}>react-native-iap V3</Text>
         </View>
         <View style={styles.content}>
-          <ScrollView style={{ alignSelf: 'stretch' }}>
-            <View style={{ height: 50 }} />
+          <ScrollView style={{alignSelf: 'stretch'}}>
+            <View style={{height: 50}} />
             <NativeButton
               onPress={this.getAvailablePurchases}
               activeOpacity={0.5}
               style={styles.btn}
-              textStyle={styles.txt}
-            >
+              textStyle={styles.txt}>
               Get available purchases
             </NativeButton>
 
-            <Text style={{ margin: 5, fontSize: 15, alignSelf: 'center' }}>
+            <Text style={{margin: 5, fontSize: 15, alignSelf: 'center'}}>
               {availableItemsMessage}
             </Text>
 
-            <Text style={{ margin: 5, fontSize: 9, alignSelf: 'center' }}>
+            <Text style={{margin: 5, fontSize: 9, alignSelf: 'center'}}>
               {receipt100}
             </Text>
 
@@ -258,8 +258,7 @@ class Page extends Component {
               onPress={(): void => this.getItems()}
               activeOpacity={0.5}
               style={styles.btn}
-              textStyle={styles.txt}
-            >
+              textStyle={styles.txt}>
               Get Products ({productList.length})
             </NativeButton>
             {productList.map((product, i) => {
@@ -268,8 +267,7 @@ class Page extends Component {
                   key={i}
                   style={{
                     flexDirection: 'column',
-                  }}
-                >
+                  }}>
                   <Text
                     style={{
                       marginTop: 20,
@@ -278,8 +276,7 @@ class Page extends Component {
                       minHeight: 100,
                       alignSelf: 'center',
                       paddingHorizontal: 20,
-                    }}
-                  >
+                    }}>
                     {JSON.stringify(product)}
                   </Text>
                   <NativeButton
@@ -289,8 +286,7 @@ class Page extends Component {
                     }
                     activeOpacity={0.5}
                     style={styles.btn}
-                    textStyle={styles.txt}
-                  >
+                    textStyle={styles.txt}>
                     Request purchase for above product
                   </NativeButton>
                 </View>
