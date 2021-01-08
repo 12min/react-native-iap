@@ -1,5 +1,4 @@
 #import "RNIapIos.h"
-#import "IAPPromotionObserver.h"
 
 #import <React/RCTLog.h>
 #import <React/RCTConvert.h>
@@ -7,7 +6,7 @@
 #import <StoreKit/StoreKit.h>
 
 ////////////////////////////////////////////////////     _//////////_  // Private Members
-@interface RNIapIos() <IAPPromotionObserverDelegate, SKRequestDelegate> {
+@interface RNIapIos() <SKRequestDelegate> {
     NSMutableDictionary *promisesByKey;
     dispatch_queue_t myQueue;
     BOOL hasListeners;
@@ -23,8 +22,6 @@
     if ((self = [super init])) {
         promisesByKey = [NSMutableDictionary dictionary];
         pendingTransactionWithAutoFinish = false;
-        [[SKPaymentQueue defaultQueue] addTransactionObserver:self];
-        [IAPPromotionObserver sharedObserver].delegate = self;
     }
     myQueue = dispatch_queue_create("reject", DISPATCH_QUEUE_SERIAL);
     validProducts = [NSMutableArray array];
@@ -55,7 +52,6 @@
 - (void)addListener:(NSString *)eventName {
     [super addListener:eventName];
 
-    SKPayment *promotedPayment = [IAPPromotionObserver sharedObserver].payment;
     if ([eventName isEqualToString:@"iap-promoted-product"] && promotedPayment != nil) {
         [self sendEventWithName:@"iap-promoted-product" body:promotedPayment.productIdentifier];
     }
@@ -96,12 +92,14 @@
     }
 }
 
-////////////////////////////////////////////////////     _//////////_  // IAPPromotionObserverDelegate
-- (BOOL)shouldAddStorePayment:(SKPayment *)payment forProduct:(SKProduct *)product {
-    if (hasListeners) {
-        [self sendEventWithName:@"iap-promoted-product" body:product.productIdentifier];
-    }
-    return NO;
+- (BOOL)paymentQueue:(SKPaymentQueue *)queue shouldAddStorePayment:(SKPayment *)payment forProduct:(SKProduct *)product {
+  promotedProduct = product;
+  promotedPayment = payment;
+
+  if (hasListeners) {
+      [self sendEventWithName:@"iap-promoted-product" body:product.productIdentifier];
+  }
+  return NO;
 }
 
 ////////////////////////////////////////////////////     _//////////_//      EXPORT_MODULE
@@ -114,8 +112,15 @@ RCT_EXPORT_MODULE();
 
 RCT_EXPORT_METHOD(canMakePayments:(RCTPromiseResolveBlock)resolve
                   reject:(RCTPromiseRejectBlock)reject) {
+    [[SKPaymentQueue defaultQueue] addTransactionObserver:self];
     BOOL canMakePayments = [SKPaymentQueue canMakePayments];
     resolve(@(canMakePayments));
+}
+
+RCT_EXPORT_METHOD(endConnection:(RCTPromiseResolveBlock)resolve
+                  reject:(RCTPromiseRejectBlock)reject) {
+    [[SKPaymentQueue defaultQueue] removeTransactionObserver:self];
+    resolve(nil);
 }
 
 RCT_EXPORT_METHOD(getItems:(NSArray*)skus
@@ -141,15 +146,16 @@ RCT_EXPORT_METHOD(buyProduct:(NSString*)sku
                   reject:(RCTPromiseRejectBlock)reject) {
     pendingTransactionWithAutoFinish = finishAutomatically;
     SKProduct *product;
-    for (SKProduct *p in validProducts) {
-        if([sku isEqualToString:p.productIdentifier]) {
-            product = p;
-            break;
+    @synchronized (validProducts) {
+        for (SKProduct *p in validProducts) {
+            if([sku isEqualToString:p.productIdentifier]) {
+                product = p;
+                break;
+            }
         }
     }
     if (product) {
-        NSString *key = RCTKeyForInstance(product.productIdentifier);
-        [self addPromiseForKey:key resolve:resolve reject:reject];
+        [self addPromiseForKey:product.productIdentifier resolve:resolve reject:reject];
             
         SKMutablePayment *payment = [SKMutablePayment paymentWithProduct:product];
         [[SKPaymentQueue defaultQueue] addPayment:payment];
@@ -159,6 +165,7 @@ RCT_EXPORT_METHOD(buyProduct:(NSString*)sku
                                  @"Invalid product ID.", @"debugMessage",
                                  @"E_DEVELOPER_ERROR", @"code",
                                  @"Invalid product ID.", @"message",
+                                 sku, @"productId",
                                  nil
                                  ];
             [self sendEventWithName:@"purchase-error" body:err];
@@ -174,15 +181,16 @@ RCT_EXPORT_METHOD(buyProductWithOffer:(NSString*)sku
                   reject:(RCTPromiseRejectBlock)reject) {
     SKProduct *product;
     SKMutablePayment *payment;
-    for (SKProduct *p in validProducts) {
-        if([sku isEqualToString:p.productIdentifier]) {
-            product = p;
-            break;
+    @synchronized (validProducts) {
+        for (SKProduct *p in validProducts) {
+            if([sku isEqualToString:p.productIdentifier]) {
+                product = p;
+                break;
+            }
         }
     }
     if (product) {
-        NSString *key = RCTKeyForInstance(product.productIdentifier);
-        [self addPromiseForKey:key resolve:resolve reject:reject];
+        [self addPromiseForKey:product.productIdentifier resolve:resolve reject:reject];
 
         payment = [SKMutablePayment paymentWithProduct:product];
         #if __IPHONE_12_2
@@ -205,6 +213,7 @@ RCT_EXPORT_METHOD(buyProductWithOffer:(NSString*)sku
                                  @"Invalid product ID.", @"debugMessage",
                                  @"Invalid product ID.", @"message",
                                  @"E_DEVELOPER_ERROR", @"code",
+                                 sku, @"productId",
                                  nil
                                  ];
             [self sendEventWithName:@"purchase-error" body:err];
@@ -219,10 +228,12 @@ RCT_EXPORT_METHOD(buyProductWithQuantityIOS:(NSString*)sku
                   reject:(RCTPromiseRejectBlock)reject) {
     NSLog(@"\n\n\n  buyProductWithQuantityIOS  \n\n.");
     SKProduct *product;
-    for (SKProduct *p in validProducts) {
-        if([sku isEqualToString:p.productIdentifier]) {
-            product = p;
-            break;
+    @synchronized (validProducts) {
+        for (SKProduct *p in validProducts) {
+            if([sku isEqualToString:p.productIdentifier]) {
+                product = p;
+                break;
+            }
         }
     }
     if (product) {
@@ -235,6 +246,7 @@ RCT_EXPORT_METHOD(buyProductWithQuantityIOS:(NSString*)sku
                                  @"Invalid product ID.", @"debugMessage",
                                  @"Invalid product ID.", @"message",
                                  @"E_DEVELOPER_ERROR", @"code",
+                                 sku, @"productId",
                                  nil
                                  ];
             [self sendEventWithName:@"purchase-error" body:err];
@@ -243,29 +255,41 @@ RCT_EXPORT_METHOD(buyProductWithQuantityIOS:(NSString*)sku
     }
 }
 
-RCT_EXPORT_METHOD(clearTransaction) {
-    NSArray *pendingTrans = [[SKPaymentQueue defaultQueue] transactions];
+RCT_EXPORT_METHOD(clearTransaction:(RCTPromiseResolveBlock)resolve
+                  reject:(RCTPromiseRejectBlock)reject) {  
+    
     NSLog(@"\n\n\n  ***  clear remaining Transactions. Call this before make a new transaction   \n\n.");
-    for (int k = 0; k < pendingTrans.count; k++) {
-        [[SKPaymentQueue defaultQueue] finishTransaction:pendingTrans[k]];
+
+    NSArray *pendingTrans = [[SKPaymentQueue defaultQueue] transactions];
+    countPendingTransaction = (NSInteger)(pendingTrans.count);
+    
+    if (countPendingTransaction > 0) {
+        [self addPromiseForKey:@"cleaningTransactions" resolve:resolve reject:reject];
+
+        for (SKPaymentTransaction *transaction in pendingTrans) {
+            [[SKPaymentQueue defaultQueue] finishTransaction:transaction];
+        }
+        
+    } else {
+        resolve(nil);
     }
 }
 
 RCT_EXPORT_METHOD(clearProducts) {
     NSLog(@"\n\n\n  ***  clear valid products. \n\n.");
-    [validProducts removeAllObjects];
+    @synchronized (validProducts) {
+        [validProducts removeAllObjects];
+    }
 }
 
 RCT_EXPORT_METHOD(promotedProduct:(RCTPromiseResolveBlock)resolve
                   reject:(RCTPromiseRejectBlock)reject) {
     NSLog(@"\n\n\n  ***  get promoted product. \n\n.");
-    SKProduct *promotedProduct = [IAPPromotionObserver sharedObserver].product;
     resolve(promotedProduct ? promotedProduct.productIdentifier : [NSNull null]);
 }
 
 RCT_EXPORT_METHOD(buyPromotedProduct:(RCTPromiseResolveBlock)resolve
                   reject:(RCTPromiseRejectBlock)reject) {
-    SKPayment *promotedPayment = [IAPPromotionObserver sharedObserver].payment;
     if (promotedPayment) {
         NSLog(@"\n\n\n  ***  buy promoted product. \n\n.");
         [[SKPaymentQueue defaultQueue] addPayment:promotedPayment];
@@ -293,12 +317,9 @@ RCT_EXPORT_METHOD(finishTransaction:(NSString*)transactionIdentifier) {
 RCT_EXPORT_METHOD(getPendingTransactions:(RCTPromiseResolveBlock)resolve
                   reject:(RCTPromiseRejectBlock)reject) {
     [self requestReceiptDataWithBlock:^(NSData *receiptData, NSError *error) {
-        if (receiptData == nil) {
-            resolve(nil);
-        }
-        else {
+        NSMutableArray *output = [NSMutableArray array];
+        if (receiptData != nil) {
             NSArray<SKPaymentTransaction *> *transactions = [[SKPaymentQueue defaultQueue] transactions];
-            NSMutableArray *output = [NSMutableArray array];
 
             for (SKPaymentTransaction *item in transactions) {
                 NSMutableDictionary *purchase = [NSMutableDictionary dictionaryWithObjectsAndKeys:
@@ -310,11 +331,26 @@ RCT_EXPORT_METHOD(getPendingTransactions:(RCTPromiseResolveBlock)resolve
                                                  ];
                 [output addObject:purchase];
             }
-
-            resolve(output);
         }
+        resolve(output);
     }];
 }
+
+
+RCT_EXPORT_METHOD(presentCodeRedemptionSheet:(RCTPromiseResolveBlock)resolve
+                  reject:(RCTPromiseRejectBlock)reject) {
+#ifdef __IPHONE_14_0
+    if (@available(iOS 14.0, *)) {
+        [[SKPaymentQueue defaultQueue] presentCodeRedemptionSheet];
+        resolve(nil);
+    } else {
+        reject([self standardErrorCode:2], @"This method only available above iOS 14", nil);
+    }
+#else
+    reject([self standardErrorCode:2], @"This method only available above iOS 14", nil);
+#endif
+}
+
 
 #pragma mark ===== StoreKit Delegate
 
@@ -324,8 +360,11 @@ RCT_EXPORT_METHOD(getPendingTransactions:(RCTPromiseResolveBlock)resolve
     }
     NSMutableArray* items = [NSMutableArray array];
 
-    for (SKProduct* product in validProducts) {
-        [items addObject:[self getProductObject:product]];
+    
+    @synchronized (validProducts) {
+        for (SKProduct* product in validProducts) {
+            [items addObject:[self getProductObject:product]];
+        }
     }
 
     [self resolvePromisesForKey:RCTKeyForInstance(request) value:items];
@@ -334,18 +373,20 @@ RCT_EXPORT_METHOD(getPendingTransactions:(RCTPromiseResolveBlock)resolve
 // Add to valid products from Apple server response. Allowing getProducts, getSubscriptions call several times.
 // Doesn't allow duplication. Replace new product.
 -(void)addProduct:(SKProduct *)aProd {
-    NSLog(@"\n  Add new object : %@", aProd.productIdentifier);
-    int delTar = -1;
-    for (int k = 0; k < validProducts.count; k++) {
-        SKProduct *cur = validProducts[k];
-        if ([cur.productIdentifier isEqualToString:aProd.productIdentifier]) {
-            delTar = k;
+    @synchronized (validProducts) {
+        NSLog(@"\n  Add new object : %@", aProd.productIdentifier);
+        int delTar = -1;
+        for (int k = 0; k < validProducts.count; k++) {
+            SKProduct *cur = validProducts[k];
+            if ([cur.productIdentifier isEqualToString:aProd.productIdentifier]) {
+                delTar = k;
+            }
         }
+        if (delTar >= 0) {
+            [validProducts removeObjectAtIndex:delTar];
+        }
+        [validProducts addObject:aProd];
     }
-    if (delTar >= 0) {
-        [validProducts removeObjectAtIndex:delTar];
-    }
-    [validProducts addObject:aProd];
 }
 
 - (void)request:(SKRequest *)request didFailWithError:(NSError *)error{
@@ -369,24 +410,43 @@ RCT_EXPORT_METHOD(getPendingTransactions:(RCTPromiseResolveBlock)resolve
 -(void)paymentQueue:(SKPaymentQueue *)queue updatedTransactions:(NSArray *)transactions {
     for (SKPaymentTransaction *transaction in transactions) {
         switch (transaction.transactionState) {
-            case SKPaymentTransactionStatePurchasing:
+            case SKPaymentTransactionStatePurchasing: {
                 NSLog(@"\n\n Purchase Started !! \n\n");
                 break;
-            case SKPaymentTransactionStatePurchased:
+            }
+            case SKPaymentTransactionStatePurchased: {
                 NSLog(@"\n\n\n\n\n Purchase Successful !! \n\n\n\n\n.");
                 [self purchaseProcess:transaction];
                 break;
-            case SKPaymentTransactionStateRestored:
+            }
+            case SKPaymentTransactionStateRestored: {
                 NSLog(@"Restored ");
                 [[SKPaymentQueue defaultQueue] finishTransaction:transaction];
                 break;
-            case SKPaymentTransactionStateDeferred:
+            }
+            case SKPaymentTransactionStateDeferred: {
                 NSLog(@"Deferred (awaiting approval via parental controls, etc.)");
+                dispatch_sync(myQueue, ^{
+                    if (hasListeners) {
+                        NSDictionary *err = [NSDictionary dictionaryWithObjectsAndKeys:
+                                             @"The payment was deferred (awaiting approval via parental controls for instance)", @"debugMessage",
+                                             @"E_DEFERRED_PAYMENT", @"code",
+                                             @"The payment was deferred (awaiting approval via parental controls for instance)", @"message",
+                                             transaction.payment.productIdentifier, @"productId",
+                                             nil
+                                             ];
+                        [self sendEventWithName:@"purchase-error" body:err];
+                    }
+                    [self rejectPromisesForKey:transaction.payment.productIdentifier
+                                          code:@"E_DEFERRED_PAYMENT"
+                                       message:@"The payment was deferred (awaiting approval via parental controls for instance)"
+                                         error:nil];
+                });
                 break;
-            case SKPaymentTransactionStateFailed:
+            }
+            case SKPaymentTransactionStateFailed: {
                 NSLog(@"\n\n\n\n\n\n Purchase Failed  !! \n\n\n\n\n");
                 [[SKPaymentQueue defaultQueue] finishTransaction:transaction];
-                NSString *key = RCTKeyForInstance(transaction.payment.productIdentifier);
                 dispatch_sync(myQueue, ^{
                     if (hasListeners) {
                         NSString *responseCode = [@(transaction.error.code) stringValue];
@@ -395,15 +455,17 @@ RCT_EXPORT_METHOD(getPendingTransactions:(RCTPromiseResolveBlock)resolve
                                              transaction.error.localizedDescription, @"debugMessage",
                                              [self standardErrorCode:(int)transaction.error.code], @"code",
                                              transaction.error.localizedDescription, @"message",
+                                             transaction.payment.productIdentifier, @"productId",
                                              nil
                                              ];
                         [self sendEventWithName:@"purchase-error" body:err];
                     }
-                    [self rejectPromisesForKey:key code:[self standardErrorCode:(int)transaction.error.code]
+                    [self rejectPromisesForKey:transaction.payment.productIdentifier code:[self standardErrorCode:(int)transaction.error.code]
                                        message:transaction.error.localizedDescription
                                          error:transaction.error];
                 });
                 break;
+            }
         }
     }
 }
@@ -448,7 +510,7 @@ RCT_EXPORT_METHOD(getPendingTransactions:(RCTPromiseResolveBlock)resolve
         pendingTransactionWithAutoFinish = false;
     }
     [self getPurchaseData:transaction withBlock:^(NSDictionary *purchase) {
-        [self resolvePromisesForKey:RCTKeyForInstance(transaction.payment.productIdentifier) value:purchase];
+        [self resolvePromisesForKey:transaction.payment.productIdentifier value:purchase];
 
         // additionally send event
         if (self->hasListeners) {
@@ -485,6 +547,7 @@ RCT_EXPORT_METHOD(getPendingTransactions:(RCTPromiseResolveBlock)resolve
 
     NSString* localizedPrice = [formatter stringFromNumber:product.price];
     NSString* introductoryPrice = localizedPrice;
+    NSString* introductoryPriceAsAmountIOS = [product.price stringValue];
 
     NSString* introductoryPriceAmount = @"";
     NSString* introductoryPricePaymentMode = @"";
@@ -492,6 +555,7 @@ RCT_EXPORT_METHOD(getPendingTransactions:(RCTPromiseResolveBlock)resolve
     NSString* introductoryPriceSubscriptionPeriod = @"";
 
     NSString* currencyCode = @"";
+    NSString* countryCode = @"";
     NSString* periodNumberIOS = @"0";
     NSString* periodUnitIOS = @"";
 
@@ -522,6 +586,7 @@ RCT_EXPORT_METHOD(getPendingTransactions:(RCTPromiseResolveBlock)resolve
             formatter.locale = product.introductoryPrice.priceLocale;
             introductoryPrice = [formatter stringFromNumber:product.introductoryPrice.price];
             introductoryPriceAmount = [product.introductoryPrice.price stringValue];
+            introductoryPriceAsAmountIOS = [product.introductoryPrice.price stringValue];
 
             switch (product.introductoryPrice.paymentMode) {
                 case SKProductDiscountPaymentModeFreeTrial:
@@ -557,6 +622,7 @@ RCT_EXPORT_METHOD(getPendingTransactions:(RCTPromiseResolveBlock)resolve
         } else {
             introductoryPrice = @"";
             introductoryPriceAmount = @"";
+            introductoryPriceAsAmountIOS = @"";
             introductoryPricePaymentMode = @"";
             introductoryPriceNumberOfPeriods = @"";
             introductoryPriceSubscriptionPeriod = @"";
@@ -567,10 +633,16 @@ RCT_EXPORT_METHOD(getPendingTransactions:(RCTPromiseResolveBlock)resolve
         currencyCode = product.priceLocale.currencyCode;
     }
 
+    if (@available(iOS 13.0, *)) {
+        countryCode = [[SKPaymentQueue defaultQueue].storefront countryCode];
+    } else if (@available(iOS 10.0, *)) {
+        countryCode = product.priceLocale.countryCode;
+    }
+
     NSArray *discounts;
     #if __IPHONE_12_2
     if (@available(iOS 12.2, *)) {
-        discounts = [self getDiscountData:[product.discounts copy]];
+        discounts = [self getDiscountData:product];
     }
     #endif
 
@@ -578,6 +650,7 @@ RCT_EXPORT_METHOD(getPendingTransactions:(RCTPromiseResolveBlock)resolve
                          product.productIdentifier, @"productId",
                          [product.price stringValue], @"price",
                          currencyCode, @"currency",
+                         countryCode, @"countryCode",
                          itemType, @"type",
                          product.localizedTitle ? product.localizedTitle : @"", @"title",
                          product.localizedDescription ? product.localizedDescription : @"", @"description",
@@ -586,6 +659,7 @@ RCT_EXPORT_METHOD(getPendingTransactions:(RCTPromiseResolveBlock)resolve
                          periodUnitIOS, @"subscriptionPeriodUnitIOS",
                          introductoryPrice, @"introductoryPrice",
                          introductoryPriceAmount, @"introductoryPriceAmount",
+                         introductoryPriceAsAmountIOS, @"introductoryPriceAsAmountIOS",
                          introductoryPricePaymentMode, @"introductoryPricePaymentModeIOS",
                          introductoryPriceNumberOfPeriods, @"introductoryPriceNumberOfPeriodsIOS",
                          introductoryPriceSubscriptionPeriod, @"introductoryPriceSubscriptionPeriodIOS",
@@ -596,18 +670,18 @@ RCT_EXPORT_METHOD(getPendingTransactions:(RCTPromiseResolveBlock)resolve
     return obj;
 }
 
-- (NSMutableArray *)getDiscountData:(NSArray *)discounts {
-    NSMutableArray *mappedDiscounts = [NSMutableArray arrayWithCapacity:[discounts count]];
+- (NSMutableArray *)getDiscountData:(SKProduct *)product {
+    NSMutableArray *mappedDiscounts = [NSMutableArray arrayWithCapacity:[product.discounts count]];
     NSString *localizedPrice;
     NSString *paymendMode;
     NSString *subscriptionPeriods;
     NSString *discountType;
 
     if (@available(iOS 11.2, *)) {
-        for(SKProductDiscount *discount in discounts) {
+        for(SKProductDiscount *discount in product.discounts) {
             NSNumberFormatter *formatter = [[NSNumberFormatter alloc] init];
             formatter.numberStyle = NSNumberFormatterCurrencyStyle;
-            formatter.locale = discount.priceLocale;
+            formatter.locale = discount.priceLocale ?: product.priceLocale;
             localizedPrice = [formatter stringFromNumber:discount.price];
             NSString *numberOfPeriods;
 
@@ -671,7 +745,7 @@ RCT_EXPORT_METHOD(getPendingTransactions:(RCTPromiseResolveBlock)resolve
                                         discountIdentifier, @"identifier",
                                         discountType, @"type",
                                         numberOfPeriods, @"numberOfPeriods",
-                                        discount.price, @"price",
+                                        [discount.price stringValue], @"price",
                                         localizedPrice, @"localizedPrice",
                                         paymendMode, @"paymentMode",
                                         subscriptionPeriods, @"subscriptionPeriod",
@@ -759,6 +833,17 @@ static NSString *RCTKeyForInstance(id instance)
             receiptBlock(nil, error);
         }
         receiptBlock = nil;
+    }
+}
+
+-(void)paymentQueue:(SKPaymentQueue *)queue removedTransactions:(NSArray *)transactions {
+    NSLog(@"removedTransactions");
+    if (countPendingTransaction != nil && countPendingTransaction > 0) {
+        countPendingTransaction -= [transactions count];
+        if (countPendingTransaction == 0) {
+            [self resolvePromisesForKey:@"cleaningTransactions" value:nil];
+            countPendingTransaction = nil;
+        }
     }
 }
 

@@ -35,7 +35,7 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
     }
 };
 import { DeviceEventEmitter, NativeEventEmitter, NativeModules, Platform, } from 'react-native';
-var RNIapIos = NativeModules.RNIapIos, RNIapModule = NativeModules.RNIapModule;
+var RNIapIos = NativeModules.RNIapIos, RNIapModule = NativeModules.RNIapModule, RNIapAmazonModule = NativeModules.RNIapAmazonModule;
 export var IAPErrorCode;
 (function (IAPErrorCode) {
     IAPErrorCode["E_IAP_NOT_AVAILABLE"] = "E_IAP_NOT_AVAILABLE";
@@ -53,18 +53,79 @@ export var IAPErrorCode;
     IAPErrorCode["E_ALREADY_OWNED"] = "E_ALREADY_OWNED";
     IAPErrorCode["E_DEVELOPER_ERROR"] = "E_DEVELOPER_ERROR";
     IAPErrorCode["E_BILLING_RESPONSE_JSON_PARSE_ERROR"] = "E_BILLING_RESPONSE_JSON_PARSE_ERROR";
+    IAPErrorCode["E_DEFERRED_PAYMENT"] = "E_DEFERRED_PAYMENT";
 })(IAPErrorCode || (IAPErrorCode = {}));
+export var ProrationModesAndroid;
+(function (ProrationModesAndroid) {
+    ProrationModesAndroid[ProrationModesAndroid["IMMEDIATE_WITH_TIME_PRORATION"] = 1] = "IMMEDIATE_WITH_TIME_PRORATION";
+    ProrationModesAndroid[ProrationModesAndroid["IMMEDIATE_AND_CHARGE_PRORATED_PRICE"] = 2] = "IMMEDIATE_AND_CHARGE_PRORATED_PRICE";
+    ProrationModesAndroid[ProrationModesAndroid["IMMEDIATE_WITHOUT_PRORATION"] = 3] = "IMMEDIATE_WITHOUT_PRORATION";
+    ProrationModesAndroid[ProrationModesAndroid["DEFERRED"] = 4] = "DEFERRED";
+    ProrationModesAndroid[ProrationModesAndroid["UNKNOWN_SUBSCRIPTION_UPGRADE_DOWNGRADE_POLICY"] = 0] = "UNKNOWN_SUBSCRIPTION_UPGRADE_DOWNGRADE_POLICY";
+})(ProrationModesAndroid || (ProrationModesAndroid = {}));
 export var PurchaseStateAndroid;
 (function (PurchaseStateAndroid) {
-    PurchaseStateAndroid[PurchaseStateAndroid["PENDING"] = 0] = "PENDING";
+    PurchaseStateAndroid[PurchaseStateAndroid["UNSPECIFIED_STATE"] = 0] = "UNSPECIFIED_STATE";
     PurchaseStateAndroid[PurchaseStateAndroid["PURCHASED"] = 1] = "PURCHASED";
-    PurchaseStateAndroid[PurchaseStateAndroid["UNSPECIFIED_STATE"] = 2] = "UNSPECIFIED_STATE";
+    PurchaseStateAndroid[PurchaseStateAndroid["PENDING"] = 2] = "PENDING";
 })(PurchaseStateAndroid || (PurchaseStateAndroid = {}));
 var ANDROID_ITEM_TYPE_SUBSCRIPTION = 'subs';
 var ANDROID_ITEM_TYPE_IAP = 'inapp';
 export var PROMOTED_PRODUCT = 'iap-promoted-product';
-function checkNativeAndroidAvailable() {
-    if (!RNIapModule) {
+export var InstallSourceAndroid;
+(function (InstallSourceAndroid) {
+    InstallSourceAndroid[InstallSourceAndroid["NOT_SET"] = 0] = "NOT_SET";
+    InstallSourceAndroid[InstallSourceAndroid["GOOGLE_PLAY"] = 1] = "GOOGLE_PLAY";
+    InstallSourceAndroid[InstallSourceAndroid["AMAZON"] = 2] = "AMAZON";
+})(InstallSourceAndroid || (InstallSourceAndroid = {}));
+var iapInstallSourceAndroid = InstallSourceAndroid.NOT_SET;
+var iapFallbackInstallSourceAndroid = InstallSourceAndroid.GOOGLE_PLAY;
+export function setFallbackInstallSourceAndroid(installSourceAndroid) {
+    iapFallbackInstallSourceAndroid = installSourceAndroid;
+}
+export function setInstallSourceAndroid(installSourceAndroid) {
+    iapInstallSourceAndroid = installSourceAndroid;
+}
+export function getInstallSourceAndroid() {
+    return iapInstallSourceAndroid;
+}
+function detectInstallSourceAndroid() {
+    return __awaiter(this, void 0, void 0, function () {
+        var detectedInstallSourceAndroid, newInstallSourceAndroid;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0: return [4 /*yield*/, RNIapModule.getInstallSource()];
+                case 1:
+                    detectedInstallSourceAndroid = _a.sent();
+                    newInstallSourceAndroid = iapFallbackInstallSourceAndroid;
+                    switch (detectedInstallSourceAndroid) {
+                        case 'GOOGLE_PLAY':
+                            newInstallSourceAndroid = InstallSourceAndroid.GOOGLE_PLAY;
+                            break;
+                        case 'AMAZON':
+                            newInstallSourceAndroid = InstallSourceAndroid.AMAZON;
+                            break;
+                    }
+                    setInstallSourceAndroid(newInstallSourceAndroid);
+                    return [2 /*return*/];
+            }
+        });
+    });
+}
+function getAndroidModule() {
+    var myRNIapModule = null;
+    switch (iapInstallSourceAndroid) {
+        case InstallSourceAndroid.AMAZON:
+            myRNIapModule = RNIapAmazonModule;
+            break;
+        default:
+            myRNIapModule = RNIapModule;
+            break;
+    }
+    return myRNIapModule;
+}
+function checkNativeAndroidAvailable(myRNIapModule) {
+    if (!myRNIapModule) {
         return Promise.reject(new Error(IAPErrorCode.E_IAP_NOT_AVAILABLE));
     }
 }
@@ -75,7 +136,7 @@ function checkNativeiOSAvailable() {
 }
 /**
  * Init module for purchase flow. Required on Android. In ios it will check wheter user canMakePayment.
- * @returns {Promise<string>}
+ * @returns {Promise<boolean>}
  */
 export var initConnection = function () {
     return Platform.select({
@@ -88,51 +149,169 @@ export var initConnection = function () {
             });
         }); },
         android: function () { return __awaiter(void 0, void 0, void 0, function () {
+            var myRNIapModule;
             return __generator(this, function (_a) {
-                if (!RNIapModule) {
-                    return [2 /*return*/, Promise.resolve()];
+                switch (_a.label) {
+                    case 0: return [4 /*yield*/, detectInstallSourceAndroid()];
+                    case 1:
+                        _a.sent();
+                        myRNIapModule = getAndroidModule();
+                        if (!RNIapModule || !RNIapAmazonModule) {
+                            return [2 /*return*/, Promise.resolve()];
+                        }
+                        return [2 /*return*/, myRNIapModule.initConnection()];
                 }
-                return [2 /*return*/, RNIapModule.initConnection()];
             });
         }); },
     })();
 };
 /**
+ * End module for purchase flow.
+ * @returns {Promise<void>}
+ */
+export var endConnection = function () {
+    return Platform.select({
+        ios: function () { return __awaiter(void 0, void 0, void 0, function () {
+            return __generator(this, function (_a) {
+                if (!RNIapIos) {
+                    console.warn('Native ios module does not exist');
+                    return [2 /*return*/, Promise.resolve()];
+                }
+                return [2 /*return*/, RNIapIos.endConnection()];
+            });
+        }); },
+        android: function () { return __awaiter(void 0, void 0, void 0, function () {
+            var myRNIapModule;
+            return __generator(this, function (_a) {
+                myRNIapModule = getAndroidModule();
+                if (!RNIapModule || !RNIapAmazonModule) {
+                    console.warn('Native android module does not exist');
+                    return [2 /*return*/, Promise.resolve()];
+                }
+                return [2 /*return*/, myRNIapModule.endConnection()];
+            });
+        }); },
+    })();
+};
+/**
+ * @deprecated
  * End module for purchase flow. Required on Android. No-op on iOS.
  * @returns {Promise<void>}
  */
 export var endConnectionAndroid = function () {
+    console.warn('endConnectionAndroid is deprecated and will be removed in the future. Please use endConnection instead');
     return Platform.select({
         ios: function () { return __awaiter(void 0, void 0, void 0, function () { return __generator(this, function (_a) {
             return [2 /*return*/, Promise.resolve()];
         }); }); },
         android: function () { return __awaiter(void 0, void 0, void 0, function () {
             return __generator(this, function (_a) {
-                if (!RNIapModule) {
-                    return [2 /*return*/, Promise.resolve()];
+                switch (iapInstallSourceAndroid) {
+                    case InstallSourceAndroid.AMAZON:
+                        return [2 /*return*/, Promise.resolve()];
+                    default:
+                        if (!RNIapModule) {
+                            return [2 /*return*/, Promise.resolve()];
+                        }
+                        return [2 /*return*/, RNIapModule.endConnection()];
                 }
-                return [2 /*return*/, RNIapModule.endConnection()];
+                return [2 /*return*/];
             });
         }); },
     })();
 };
 /**
  * Consume all remaining tokens. Android only.
+ * This is considered dangerous as you should deliver the purchased feature BEFORE consuming it.
+ * If you used this method to refresh Play Store cache (of failed pending payment still marked as failed),
+ *  prefer using flushFailedPurchasesCachedAsPendingAndroid
+ * @deprecated
  * @returns {Promise<string[]>}
  */
 export var consumeAllItemsAndroid = function () {
+    console.warn('consumeAllItemsAndroid is deprecated and will be removed in the future. Please use flushFailedPurchasesCachedAsPendingAndroid instead');
     return Platform.select({
         ios: function () { return __awaiter(void 0, void 0, void 0, function () { return __generator(this, function (_a) {
             return [2 /*return*/, Promise.resolve()];
         }); }); },
         android: function () { return __awaiter(void 0, void 0, void 0, function () {
+            var myRNIapModule;
             return __generator(this, function (_a) {
-                checkNativeAndroidAvailable();
-                return [2 /*return*/, RNIapModule.refreshItems()];
+                switch (_a.label) {
+                    case 0:
+                        myRNIapModule = getAndroidModule();
+                        return [4 /*yield*/, checkNativeAndroidAvailable(myRNIapModule)];
+                    case 1:
+                        _a.sent();
+                        return [2 /*return*/, myRNIapModule.refreshItems()];
+                }
             });
         }); },
     })();
 };
+/**
+ * Consume all 'ghost' purchases (that is, pending payment that already failed but is still marked as pending in Play Store cache). Android only.
+ * @returns {Promise<boolean>}
+ */
+export var flushFailedPurchasesCachedAsPendingAndroid = function () {
+    return Platform.select({
+        ios: function () { return __awaiter(void 0, void 0, void 0, function () { return __generator(this, function (_a) {
+            return [2 /*return*/, Promise.resolve()];
+        }); }); },
+        android: function () { return __awaiter(void 0, void 0, void 0, function () {
+            var myRNIapModule;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        myRNIapModule = getAndroidModule();
+                        return [4 /*yield*/, checkNativeAndroidAvailable(myRNIapModule)];
+                    case 1:
+                        _a.sent();
+                        return [2 /*return*/, RNIapModule.flushFailedPurchasesCachedAsPending()];
+                }
+            });
+        }); },
+    })();
+};
+/**
+ * Fill products with additional data
+ * @param {Array<Common>} products Products
+ */
+var fillProductsAdditionalData = function (products) { return __awaiter(void 0, void 0, void 0, function () {
+    var myRNIapModule, user, currencies, currency_1;
+    return __generator(this, function (_a) {
+        switch (_a.label) {
+            case 0:
+                myRNIapModule = getAndroidModule();
+                if (!(iapInstallSourceAndroid === InstallSourceAndroid.AMAZON)) return [3 /*break*/, 2];
+                return [4 /*yield*/, myRNIapModule.getUser()];
+            case 1:
+                user = _a.sent();
+                currencies = {
+                    CA: 'CAD',
+                    ES: 'EUR',
+                    AU: 'AUD',
+                    DE: 'EUR',
+                    IN: 'INR',
+                    US: 'USD',
+                    JP: 'JPY',
+                    GB: 'GBP',
+                    IT: 'EUR',
+                    BR: 'BRL',
+                    FR: 'EUR',
+                };
+                currency_1 = currencies[user.userMarketplaceAmazon];
+                // Add currency to products
+                products.forEach(function (product) {
+                    if (currency_1) {
+                        product.currency = currency_1;
+                    }
+                });
+                _a.label = 2;
+            case 2: return [2 /*return*/, products];
+        }
+    });
+}); };
 /**
  * Get a list of products (consumable and non-consumable items, but not subscriptions)
  * @param {string[]} skus The item skus
@@ -151,11 +330,19 @@ export var getProducts = function (skus) {
             });
         }); },
         android: function () { return __awaiter(void 0, void 0, void 0, function () {
+            var myRNIapModule, products;
             return __generator(this, function (_a) {
-                if (!RNIapModule) {
-                    return [2 /*return*/, []];
+                switch (_a.label) {
+                    case 0:
+                        myRNIapModule = getAndroidModule();
+                        return [4 /*yield*/, checkNativeAndroidAvailable(myRNIapModule)];
+                    case 1:
+                        _a.sent();
+                        return [4 /*yield*/, myRNIapModule.getItemsByType(ANDROID_ITEM_TYPE_IAP, skus)];
+                    case 2:
+                        products = _a.sent();
+                        return [2 /*return*/, fillProductsAdditionalData(products)];
                 }
-                return [2 /*return*/, RNIapModule.getItemsByType(ANDROID_ITEM_TYPE_IAP, skus)];
             });
         }); },
     })();
@@ -169,16 +356,30 @@ export var getSubscriptions = function (skus) {
     return Platform.select({
         ios: function () { return __awaiter(void 0, void 0, void 0, function () {
             return __generator(this, function (_a) {
-                checkNativeiOSAvailable();
-                return [2 /*return*/, RNIapIos.getItems(skus).then(function (items) {
-                        return items.filter(function (item) { return skus.includes(item.productId); });
-                    })];
+                switch (_a.label) {
+                    case 0: return [4 /*yield*/, checkNativeiOSAvailable()];
+                    case 1:
+                        _a.sent();
+                        return [2 /*return*/, RNIapIos.getItems(skus).then(function (items) {
+                                return items.filter(function (item) { return skus.includes(item.productId); });
+                            })];
+                }
             });
         }); },
         android: function () { return __awaiter(void 0, void 0, void 0, function () {
+            var myModule, subscriptions;
             return __generator(this, function (_a) {
-                checkNativeAndroidAvailable();
-                return [2 /*return*/, RNIapModule.getItemsByType(ANDROID_ITEM_TYPE_SUBSCRIPTION, skus)];
+                switch (_a.label) {
+                    case 0:
+                        myModule = getAndroidModule();
+                        return [4 /*yield*/, checkNativeAndroidAvailable(myModule)];
+                    case 1:
+                        _a.sent();
+                        return [4 /*yield*/, myModule.getItemsByType(ANDROID_ITEM_TYPE_SUBSCRIPTION, skus)];
+                    case 2:
+                        subscriptions = _a.sent();
+                        return [2 /*return*/, fillProductsAdditionalData(subscriptions)];
+                }
             });
         }); },
     })();
@@ -191,21 +392,28 @@ export var getPurchaseHistory = function () {
     return Platform.select({
         ios: function () { return __awaiter(void 0, void 0, void 0, function () {
             return __generator(this, function (_a) {
-                checkNativeiOSAvailable();
-                return [2 /*return*/, RNIapIos.getAvailableItems()];
+                switch (_a.label) {
+                    case 0: return [4 /*yield*/, checkNativeiOSAvailable()];
+                    case 1:
+                        _a.sent();
+                        return [2 /*return*/, RNIapIos.getAvailableItems()];
+                }
             });
         }); },
         android: function () { return __awaiter(void 0, void 0, void 0, function () {
-            var products, subscriptions;
+            var myRNIapModule, products, subscriptions;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
-                        checkNativeAndroidAvailable();
-                        return [4 /*yield*/, RNIapModule.getPurchaseHistoryByType(ANDROID_ITEM_TYPE_IAP)];
+                        myRNIapModule = getAndroidModule();
+                        return [4 /*yield*/, checkNativeAndroidAvailable(myRNIapModule)];
                     case 1:
-                        products = _a.sent();
-                        return [4 /*yield*/, RNIapModule.getPurchaseHistoryByType(ANDROID_ITEM_TYPE_SUBSCRIPTION)];
+                        _a.sent();
+                        return [4 /*yield*/, myRNIapModule.getPurchaseHistoryByType(ANDROID_ITEM_TYPE_IAP)];
                     case 2:
+                        products = _a.sent();
+                        return [4 /*yield*/, myRNIapModule.getPurchaseHistoryByType(ANDROID_ITEM_TYPE_SUBSCRIPTION)];
+                    case 3:
                         subscriptions = _a.sent();
                         return [2 /*return*/, products.concat(subscriptions)];
                 }
@@ -221,21 +429,28 @@ export var getAvailablePurchases = function () {
     return Platform.select({
         ios: function () { return __awaiter(void 0, void 0, void 0, function () {
             return __generator(this, function (_a) {
-                checkNativeiOSAvailable();
-                return [2 /*return*/, RNIapIos.getAvailableItems()];
+                switch (_a.label) {
+                    case 0: return [4 /*yield*/, checkNativeiOSAvailable()];
+                    case 1:
+                        _a.sent();
+                        return [2 /*return*/, RNIapIos.getAvailableItems()];
+                }
             });
         }); },
         android: function () { return __awaiter(void 0, void 0, void 0, function () {
-            var products, subscriptions;
+            var myRNIapModule, products, subscriptions;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
-                        checkNativeAndroidAvailable();
-                        return [4 /*yield*/, RNIapModule.getAvailableItemsByType(ANDROID_ITEM_TYPE_IAP)];
+                        myRNIapModule = getAndroidModule();
+                        return [4 /*yield*/, checkNativeAndroidAvailable(myRNIapModule)];
                     case 1:
-                        products = _a.sent();
-                        return [4 /*yield*/, RNIapModule.getAvailableItemsByType(ANDROID_ITEM_TYPE_SUBSCRIPTION)];
+                        _a.sent();
+                        return [4 /*yield*/, myRNIapModule.getAvailableItemsByType(ANDROID_ITEM_TYPE_IAP)];
                     case 2:
+                        products = _a.sent();
+                        return [4 /*yield*/, myRNIapModule.getAvailableItemsByType(ANDROID_ITEM_TYPE_SUBSCRIPTION)];
+                    case 3:
                         subscriptions = _a.sent();
                         return [2 /*return*/, products.concat(subscriptions)];
                 }
@@ -247,29 +462,41 @@ export var getAvailablePurchases = function () {
  * Request a purchase for product. This will be received in `PurchaseUpdatedListener`.
  * @param {string} sku The product's sku/ID
  * @param {boolean} [andDangerouslyFinishTransactionAutomaticallyIOS] You should set this to false and call finishTransaction manually when you have delivered the purchased goods to the user. It defaults to true to provide backwards compatibility. Will default to false in version 4.0.0.
- * @param {string} [developerIdAndroid] Specify an optional obfuscated string of developer profile name.
- * @param {string} [userIdAndroid] Specify an optional obfuscated string that is uniquely associated with the user's account in.
+ * @param {string} [obfuscatedAccountIdAndroid] Specifies an optional obfuscated string that is uniquely associated with the user's account in your app.
+ * @param {string} [obfuscatedProfileIdAndroid] Specifies an optional obfuscated string that is uniquely associated with the user's profile in your app.
  * @returns {Promise<InAppPurchase>}
  */
-export var requestPurchase = function (sku, andDangerouslyFinishTransactionAutomaticallyIOS, developerIdAndroid, accountIdAndroid) {
+export var requestPurchase = function (sku, andDangerouslyFinishTransactionAutomaticallyIOS, obfuscatedAccountIdAndroid, obfuscatedProfileIdAndroid) {
     return Platform.select({
         ios: function () { return __awaiter(void 0, void 0, void 0, function () {
             return __generator(this, function (_a) {
-                andDangerouslyFinishTransactionAutomaticallyIOS =
-                    andDangerouslyFinishTransactionAutomaticallyIOS === undefined
-                        ? true
-                        : andDangerouslyFinishTransactionAutomaticallyIOS;
-                if (andDangerouslyFinishTransactionAutomaticallyIOS) {
-                    console.warn('You are dangerously allowing react-native-iap to finish your transaction automatically. You should set andDangerouslyFinishTransactionAutomatically to false when calling requestPurchase and call finishTransaction manually when you have delivered the purchased goods to the user. It defaults to true to provide backwards compatibility. Will default to false in version 4.0.0.');
+                switch (_a.label) {
+                    case 0:
+                        andDangerouslyFinishTransactionAutomaticallyIOS =
+                            andDangerouslyFinishTransactionAutomaticallyIOS === undefined
+                                ? false
+                                : andDangerouslyFinishTransactionAutomaticallyIOS;
+                        if (andDangerouslyFinishTransactionAutomaticallyIOS) {
+                            console.warn('You are dangerously allowing react-native-iap to finish your transaction automatically. You should set andDangerouslyFinishTransactionAutomatically to false when calling requestPurchase and call finishTransaction manually when you have delivered the purchased goods to the user. It defaults to true to provide backwards compatibility. Will default to false in version 4.0.0.');
+                        }
+                        return [4 /*yield*/, checkNativeiOSAvailable()];
+                    case 1:
+                        _a.sent();
+                        return [2 /*return*/, RNIapIos.buyProduct(sku, andDangerouslyFinishTransactionAutomaticallyIOS)];
                 }
-                checkNativeiOSAvailable();
-                return [2 /*return*/, RNIapIos.buyProduct(sku, andDangerouslyFinishTransactionAutomaticallyIOS)];
             });
         }); },
         android: function () { return __awaiter(void 0, void 0, void 0, function () {
+            var myRNIapModule;
             return __generator(this, function (_a) {
-                checkNativeAndroidAvailable();
-                return [2 /*return*/, RNIapModule.buyItemByType(ANDROID_ITEM_TYPE_IAP, sku, null, 0, developerIdAndroid, accountIdAndroid)];
+                switch (_a.label) {
+                    case 0:
+                        myRNIapModule = getAndroidModule();
+                        return [4 /*yield*/, checkNativeAndroidAvailable(myRNIapModule)];
+                    case 1:
+                        _a.sent();
+                        return [2 /*return*/, myRNIapModule.buyItemByType(ANDROID_ITEM_TYPE_IAP, sku, null, null, 0, obfuscatedAccountIdAndroid, obfuscatedProfileIdAndroid)];
+                }
             });
         }); },
     })();
@@ -279,32 +506,45 @@ export var requestPurchase = function (sku, andDangerouslyFinishTransactionAutom
  * @param {string} sku The product's sku/ID
  * @param {boolean} [andDangerouslyFinishTransactionAutomaticallyIOS] You should set this to false and call finishTransaction manually when you have delivered the purchased goods to the user. It defaults to true to provide backwards compatibility. Will default to false in version 4.0.0.
  * @param {string} [oldSkuAndroid] SKU that the user is upgrading or downgrading from.
- * @param {number} [prorationModeAndroid] UNKNOWN_SUBSCRIPTION_UPGRADE_DOWNGRADE_POLICY, IMMEDIATE_WITH_TIME_PRORATION, IMMEDIATE_AND_CHARGE_PRORATED_PRICE, IMMEDIATE_WITHOUT_PRORATION, DEFERRED
- * @param {string} [developerIdAndroid] Specify an optional obfuscated string of developer profile name.
- * @param {string} [userIdAndroid] Specify an optional obfuscated string that is uniquely associated with the user's account in.
+ * @param {string} [purchaseTokenAndroid] purchaseToken that the user is upgrading or downgrading from (Android).
+ * @param {string} [obfuscatedAccountIdAndroid] Specifies an optional obfuscated string that is uniquely associated with the user's account in your app.
+ * @param {string} [obfuscatedProfileIdAndroid] Specifies an optional obfuscated string that is uniquely associated with the user's profile in your app.
+ * @param {ProrationModesAndroid} [prorationModeAndroid] UNKNOWN_SUBSCRIPTION_UPGRADE_DOWNGRADE_POLICY, IMMEDIATE_WITH_TIME_PRORATION, IMMEDIATE_AND_CHARGE_PRORATED_PRICE, IMMEDIATE_WITHOUT_PRORATION, DEFERRED
  * @returns {Promise<void>}
  */
-export var requestSubscription = function (sku, andDangerouslyFinishTransactionAutomaticallyIOS, oldSkuAndroid, prorationModeAndroid, developerIdAndroid, userIdAndroid) {
+export var requestSubscription = function (sku, andDangerouslyFinishTransactionAutomaticallyIOS, oldSkuAndroid, purchaseTokenAndroid, prorationModeAndroid, obfuscatedAccountIdAndroid, obfuscatedProfileIdAndroid) {
     return Platform.select({
         ios: function () { return __awaiter(void 0, void 0, void 0, function () {
             return __generator(this, function (_a) {
-                andDangerouslyFinishTransactionAutomaticallyIOS =
-                    andDangerouslyFinishTransactionAutomaticallyIOS === undefined
-                        ? true
-                        : andDangerouslyFinishTransactionAutomaticallyIOS;
-                if (andDangerouslyFinishTransactionAutomaticallyIOS) {
-                    console.warn('You are dangerously allowing react-native-iap to finish your transaction automatically. You should set andDangerouslyFinishTransactionAutomatically to false when calling requestPurchase and call finishTransaction manually when you have delivered the purchased goods to the user. It defaults to true to provide backwards compatibility. Will default to false in version 4.0.0.');
+                switch (_a.label) {
+                    case 0:
+                        andDangerouslyFinishTransactionAutomaticallyIOS =
+                            andDangerouslyFinishTransactionAutomaticallyIOS === undefined
+                                ? false
+                                : andDangerouslyFinishTransactionAutomaticallyIOS;
+                        if (andDangerouslyFinishTransactionAutomaticallyIOS) {
+                            console.warn('You are dangerously allowing react-native-iap to finish your transaction automatically. You should set andDangerouslyFinishTransactionAutomatically to false when calling requestPurchase and call finishTransaction manually when you have delivered the purchased goods to the user. It defaults to true to provide backwards compatibility. Will default to false in version 4.0.0.');
+                        }
+                        return [4 /*yield*/, checkNativeiOSAvailable()];
+                    case 1:
+                        _a.sent();
+                        return [2 /*return*/, RNIapIos.buyProduct(sku, andDangerouslyFinishTransactionAutomaticallyIOS)];
                 }
-                checkNativeiOSAvailable();
-                return [2 /*return*/, RNIapIos.buyProduct(sku, andDangerouslyFinishTransactionAutomaticallyIOS)];
             });
         }); },
         android: function () { return __awaiter(void 0, void 0, void 0, function () {
+            var myRNIapModule;
             return __generator(this, function (_a) {
-                checkNativeAndroidAvailable();
-                if (!prorationModeAndroid)
-                    prorationModeAndroid = -1;
-                return [2 /*return*/, RNIapModule.buyItemByType(ANDROID_ITEM_TYPE_SUBSCRIPTION, sku, oldSkuAndroid, prorationModeAndroid, developerIdAndroid, userIdAndroid)];
+                switch (_a.label) {
+                    case 0:
+                        if (!prorationModeAndroid)
+                            prorationModeAndroid = -1;
+                        myRNIapModule = getAndroidModule();
+                        return [4 /*yield*/, checkNativeAndroidAvailable(myRNIapModule)];
+                    case 1:
+                        _a.sent();
+                        return [2 /*return*/, myRNIapModule.buyItemByType(ANDROID_ITEM_TYPE_SUBSCRIPTION, sku, oldSkuAndroid, purchaseTokenAndroid, prorationModeAndroid, obfuscatedAccountIdAndroid, obfuscatedProfileIdAndroid)];
+                }
             });
         }); },
     })();
@@ -318,8 +558,12 @@ export var requestPurchaseWithQuantityIOS = function (sku, quantity) {
     return Platform.select({
         ios: function () { return __awaiter(void 0, void 0, void 0, function () {
             return __generator(this, function (_a) {
-                checkNativeiOSAvailable();
-                return [2 /*return*/, RNIapIos.buyProductWithQuantityIOS(sku, quantity)];
+                switch (_a.label) {
+                    case 0: return [4 /*yield*/, checkNativeiOSAvailable()];
+                    case 1:
+                        _a.sent();
+                        return [2 /*return*/, RNIapIos.buyProductWithQuantityIOS(sku, quantity)];
+                }
             });
         }); },
     })();
@@ -336,8 +580,12 @@ export var finishTransactionIOS = function (transactionId) {
     return Platform.select({
         ios: function () { return __awaiter(void 0, void 0, void 0, function () {
             return __generator(this, function (_a) {
-                checkNativeiOSAvailable();
-                return [2 /*return*/, RNIapIos.finishTransaction(transactionId)];
+                switch (_a.label) {
+                    case 0: return [4 /*yield*/, checkNativeiOSAvailable()];
+                    case 1:
+                        _a.sent();
+                        return [2 /*return*/, RNIapIos.finishTransaction(transactionId)];
+                }
             });
         }); },
     })();
@@ -345,7 +593,7 @@ export var finishTransactionIOS = function (transactionId) {
 /**
  * Finish Transaction (both platforms)
  *   Abstracts `finishTransactionIOS`, `consumePurchaseAndroid`, `acknowledgePurchaseAndroid` in to one method.
- * @param {string} transactionId The transactionId of the function that you would like to finish.
+ * @param {object} purchase The purchase that you would like to finish.
  * @param {boolean} isConsumable Checks if purchase is consumable. Has effect on `android`.
  * @param {string} developerPayloadAndroid Android developerPayload.
  * @returns {Promise<string | void> }
@@ -354,19 +602,26 @@ export var finishTransaction = function (purchase, isConsumable, developerPayloa
     return Platform.select({
         ios: function () { return __awaiter(void 0, void 0, void 0, function () {
             return __generator(this, function (_a) {
-                checkNativeiOSAvailable();
-                return [2 /*return*/, RNIapIos.finishTransaction(purchase.transactionId)];
+                switch (_a.label) {
+                    case 0: return [4 /*yield*/, checkNativeiOSAvailable()];
+                    case 1:
+                        _a.sent();
+                        return [2 /*return*/, RNIapIos.finishTransaction(purchase.transactionId)];
+                }
             });
         }); },
         android: function () { return __awaiter(void 0, void 0, void 0, function () {
+            var myRNIapModule;
             return __generator(this, function (_a) {
+                myRNIapModule = getAndroidModule();
                 if (purchase) {
                     if (isConsumable) {
-                        return [2 /*return*/, RNIapModule.consumeProduct(purchase.purchaseToken, developerPayloadAndroid)];
+                        return [2 /*return*/, myRNIapModule.consumeProduct(purchase.purchaseToken, developerPayloadAndroid)];
                     }
-                    else if (!purchase.isAcknowledgedAndroid &&
-                        purchase.purchaseStateAndroid === PurchaseStateAndroid.PURCHASED) {
-                        return [2 /*return*/, RNIapModule.acknowledgePurchase(purchase.purchaseToken, developerPayloadAndroid)];
+                    else if (purchase.userIdAmazon ||
+                        (!purchase.isAcknowledgedAndroid &&
+                            purchase.purchaseStateAndroid === PurchaseStateAndroid.PURCHASED)) {
+                        return [2 /*return*/, myRNIapModule.acknowledgePurchase(purchase.purchaseToken, developerPayloadAndroid)];
                     }
                     else {
                         throw new Error('purchase is not suitable to be purchased');
@@ -382,17 +637,21 @@ export var finishTransaction = function (purchase, isConsumable, developerPayloa
 };
 /**
  * Clear Transaction (iOS only)
- *   Finish remaining transactions. Related to issue #257
+ *   Finish remaining transactions. Related to issue #257 and #801
  *     link : https://github.com/dooboolab/react-native-iap/issues/257
+ *            https://github.com/dooboolab/react-native-iap/issues/801
  * @returns {Promise<void>}
  */
 export var clearTransactionIOS = function () {
-    console.warn('The `clearTransactionIOS` method is deprecated.');
     return Platform.select({
         ios: function () { return __awaiter(void 0, void 0, void 0, function () {
             return __generator(this, function (_a) {
-                checkNativeiOSAvailable();
-                return [2 /*return*/, RNIapIos.clearTransaction()];
+                switch (_a.label) {
+                    case 0: return [4 /*yield*/, checkNativeiOSAvailable()];
+                    case 1:
+                        _a.sent();
+                        return [2 /*return*/, RNIapIos.clearTransaction()];
+                }
             });
         }); },
         android: function () { return __awaiter(void 0, void 0, void 0, function () { return __generator(this, function (_a) {
@@ -407,12 +666,18 @@ export var clearTransactionIOS = function () {
  */
 export var clearProductsIOS = function () {
     return Platform.select({
-        ios: function () {
-            checkNativeiOSAvailable();
-            return RNIapIos.clearProducts();
-        },
+        ios: function () { return __awaiter(void 0, void 0, void 0, function () {
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0: return [4 /*yield*/, checkNativeiOSAvailable()];
+                    case 1:
+                        _a.sent();
+                        return [2 /*return*/, RNIapIos.clearProducts()];
+                }
+            });
+        }); },
         android: function () { return __awaiter(void 0, void 0, void 0, function () { return __generator(this, function (_a) {
-            return [2 /*return*/, Promise.resolve];
+            return [2 /*return*/, undefined];
         }); }); },
     })();
 };
@@ -427,9 +692,16 @@ export var acknowledgePurchaseAndroid = function (token, developerPayload) {
             return [2 /*return*/, Promise.resolve()];
         }); }); },
         android: function () { return __awaiter(void 0, void 0, void 0, function () {
+            var myRNIapModule;
             return __generator(this, function (_a) {
-                checkNativeAndroidAvailable();
-                return [2 /*return*/, RNIapModule.acknowledgePurchase(token, developerPayload)];
+                switch (_a.label) {
+                    case 0:
+                        myRNIapModule = getAndroidModule();
+                        return [4 /*yield*/, checkNativeAndroidAvailable(myRNIapModule)];
+                    case 1:
+                        _a.sent();
+                        return [2 /*return*/, myRNIapModule.acknowledgePurchase(token, developerPayload)];
+                }
             });
         }); },
     })();
@@ -445,9 +717,16 @@ export var consumePurchaseAndroid = function (token, developerPayload) {
             return [2 /*return*/, Promise.resolve()];
         }); }); },
         android: function () { return __awaiter(void 0, void 0, void 0, function () {
+            var myRNIapModule;
             return __generator(this, function (_a) {
-                checkNativeAndroidAvailable();
-                return [2 /*return*/, RNIapModule.consumeProduct(token, developerPayload)];
+                switch (_a.label) {
+                    case 0:
+                        myRNIapModule = getAndroidModule();
+                        return [4 /*yield*/, checkNativeAndroidAvailable(myRNIapModule)];
+                    case 1:
+                        _a.sent();
+                        return [2 /*return*/, myRNIapModule.consumeProduct(token, developerPayload)];
+                }
             });
         }); },
     })();
@@ -461,8 +740,12 @@ export var getPromotedProductIOS = function () {
     return Platform.select({
         ios: function () { return __awaiter(void 0, void 0, void 0, function () {
             return __generator(this, function (_a) {
-                checkNativeiOSAvailable();
-                return [2 /*return*/, RNIapIos.promotedProduct()];
+                switch (_a.label) {
+                    case 0: return [4 /*yield*/, checkNativeiOSAvailable()];
+                    case 1:
+                        _a.sent();
+                        return [2 /*return*/, RNIapIos.promotedProduct()];
+                }
             });
         }); },
         android: function () { return __awaiter(void 0, void 0, void 0, function () { return __generator(this, function (_a) {
@@ -479,8 +762,12 @@ export var buyPromotedProductIOS = function () {
     return Platform.select({
         ios: function () { return __awaiter(void 0, void 0, void 0, function () {
             return __generator(this, function (_a) {
-                checkNativeiOSAvailable();
-                return [2 /*return*/, RNIapIos.buyPromotedProduct()];
+                switch (_a.label) {
+                    case 0: return [4 /*yield*/, checkNativeiOSAvailable()];
+                    case 1:
+                        _a.sent();
+                        return [2 /*return*/, RNIapIos.buyPromotedProduct()];
+                }
             });
         }); },
         android: function () { return __awaiter(void 0, void 0, void 0, function () { return __generator(this, function (_a) {
@@ -507,8 +794,12 @@ export var requestPurchaseWithOfferIOS = function (sku, forUser, withOffer) {
     return Platform.select({
         ios: function () { return __awaiter(void 0, void 0, void 0, function () {
             return __generator(this, function (_a) {
-                checkNativeiOSAvailable();
-                return [2 /*return*/, RNIapIos.buyProductWithOffer(sku, forUser, withOffer)];
+                switch (_a.label) {
+                    case 0: return [4 /*yield*/, checkNativeiOSAvailable()];
+                    case 1:
+                        _a.sent();
+                        return [2 /*return*/, RNIapIos.buyProductWithOffer(sku, forUser, withOffer)];
+                }
             });
         }); },
         android: function () { return __awaiter(void 0, void 0, void 0, function () { return __generator(this, function (_a) {
@@ -586,15 +877,16 @@ export var validateReceiptAndroid = function (packageName, productId, productTok
  * Add IAP purchase event in ios.
  * @returns {callback(e: InAppPurchase | ProductPurchase)}
  */
-export var purchaseUpdatedListener = function (e) {
+export var purchaseUpdatedListener = function (listener) {
     if (Platform.OS === 'ios') {
         checkNativeiOSAvailable();
         var myModuleEvt = new NativeEventEmitter(RNIapIos);
-        return myModuleEvt.addListener('purchase-updated', e);
+        return myModuleEvt.addListener('purchase-updated', listener);
     }
     else {
-        var emitterSubscription = DeviceEventEmitter.addListener('purchase-updated', e);
-        RNIapModule.startListening();
+        var emitterSubscription = DeviceEventEmitter.addListener('purchase-updated', listener);
+        var myRNIapModule = getAndroidModule();
+        myRNIapModule.startListening();
         return emitterSubscription;
     }
 };
@@ -602,39 +894,71 @@ export var purchaseUpdatedListener = function (e) {
  * Add IAP purchase error event in ios.
  * @returns {callback(e: PurchaseError)}
  */
-export var purchaseErrorListener = function (e) {
+export var purchaseErrorListener = function (listener) {
     if (Platform.OS === 'ios') {
         checkNativeiOSAvailable();
         var myModuleEvt = new NativeEventEmitter(RNIapIos);
-        return myModuleEvt.addListener('purchase-error', e);
+        return myModuleEvt.addListener('purchase-error', listener);
     }
     else {
-        return DeviceEventEmitter.addListener('purchase-error', e);
+        return DeviceEventEmitter.addListener('purchase-error', listener);
     }
 };
 /**
  * Get the current receipt base64 encoded in IOS.
  * @returns {Promise<string>}
  */
-export var getReceiptIOS = function () {
-    if (Platform.OS === 'ios') {
-        checkNativeiOSAvailable();
-        return RNIapIos.requestReceipt();
-    }
-};
+export var getReceiptIOS = function () { return __awaiter(void 0, void 0, void 0, function () {
+    return __generator(this, function (_a) {
+        switch (_a.label) {
+            case 0:
+                if (!(Platform.OS === 'ios')) return [3 /*break*/, 2];
+                return [4 /*yield*/, checkNativeiOSAvailable()];
+            case 1:
+                _a.sent();
+                return [2 /*return*/, RNIapIos.requestReceipt()];
+            case 2: return [2 /*return*/];
+        }
+    });
+}); };
 /**
  * Get the pending purchases in IOS.
  * @returns {Promise<ProductPurchase[]>}
  */
-export var getPendingPurchasesIOS = function () {
-    if (Platform.OS === 'ios') {
-        checkNativeiOSAvailable();
-        return RNIapIos.getPendingTransactions();
-    }
-};
-export default {
+export var getPendingPurchasesIOS = function () { return __awaiter(void 0, void 0, void 0, function () {
+    return __generator(this, function (_a) {
+        switch (_a.label) {
+            case 0:
+                if (!(Platform.OS === 'ios')) return [3 /*break*/, 2];
+                return [4 /*yield*/, checkNativeiOSAvailable()];
+            case 1:
+                _a.sent();
+                return [2 /*return*/, RNIapIos.getPendingTransactions()];
+            case 2: return [2 /*return*/];
+        }
+    });
+}); };
+/**
+ * Launches a modal to register the redeem offer code in IOS.
+ * @returns {Promise<null>}
+ */
+export var presentCodeRedemptionSheetIOS = function () { return __awaiter(void 0, void 0, void 0, function () {
+    return __generator(this, function (_a) {
+        switch (_a.label) {
+            case 0:
+                if (!(Platform.OS === 'ios')) return [3 /*break*/, 2];
+                return [4 /*yield*/, checkNativeiOSAvailable()];
+            case 1:
+                _a.sent();
+                return [2 /*return*/, RNIapIos.presentCodeRedemptionSheet()];
+            case 2: return [2 /*return*/];
+        }
+    });
+}); };
+var iapUtils = {
     IAPErrorCode: IAPErrorCode,
     initConnection: initConnection,
+    endConnection: endConnection,
     endConnectionAndroid: endConnectionAndroid,
     getProducts: getProducts,
     getSubscriptions: getSubscriptions,
@@ -642,6 +966,7 @@ export default {
     getAvailablePurchases: getAvailablePurchases,
     getPendingPurchasesIOS: getPendingPurchasesIOS,
     consumeAllItemsAndroid: consumeAllItemsAndroid,
+    flushFailedPurchasesCachedAsPendingAndroid: flushFailedPurchasesCachedAsPendingAndroid,
     clearProductsIOS: clearProductsIOS,
     clearTransactionIOS: clearTransactionIOS,
     acknowledgePurchaseAndroid: acknowledgePurchaseAndroid,
@@ -658,4 +983,6 @@ export default {
     getReceiptIOS: getReceiptIOS,
     getPromotedProductIOS: getPromotedProductIOS,
     buyPromotedProductIOS: buyPromotedProductIOS,
+    presentCodeRedemptionSheetIOS: presentCodeRedemptionSheetIOS,
 };
+export default iapUtils;
